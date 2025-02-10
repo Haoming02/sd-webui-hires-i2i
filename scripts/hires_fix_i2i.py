@@ -2,12 +2,14 @@ from modules.ui_components import InputAccordion
 from modules import scripts, shared
 from PIL import Image
 import gradio as gr
+import numpy as np
 import re
 
 
 class HiresI2I(scripts.Script):
 
     def __init__(self):
+        self.key: int = None
         self.upscaled: Image.Image = None
 
     def title(self):
@@ -17,9 +19,9 @@ class HiresI2I(scripts.Script):
         return scripts.AlwaysVisible if is_img2img else None
 
     def ui(self, is_img2img):
-        return self._ui() if is_img2img else None
+        if not is_img2img:
+            return
 
-    def _ui(self):
         with InputAccordion(value=False, label=self.title()) as enable:
             with gr.Row():
                 upscaler = gr.Dropdown(
@@ -39,7 +41,7 @@ class HiresI2I(scripts.Script):
 
             def auto_scale(upscaler: str):
                 if not (match := re.search(r"(\d)[xX]|[xX](\d)", upscaler)):
-                    return gr.update()
+                    return gr.skip()
 
                 return gr.update(value=int(match.group(1) or match.group(2)))
 
@@ -70,7 +72,7 @@ class HiresI2I(scripts.Script):
 
         raise gr.Error(f'Could not find Upscaler "{name}"')
 
-    def before_process(
+    def setup(
         self,
         p,
         enable: bool,
@@ -79,25 +81,24 @@ class HiresI2I(scripts.Script):
         *args,
         **kwargs,
     ):
-        if not enable:
-            return
-
-        if self.upscaled is not None:
+        if (not enable) or (upscaler_name == "None"):
             return
 
         init_image = p.init_images[0]
-        upscaler = self.get_upscaler(upscaler_name)
-        self.upscaled = upscaler.scaler.upscale(init_image, ratio, upscaler.data_path)
+        key = (hash(np.asarray(init_image.getdata()).tobytes()), upscaler_name, ratio)
+
+        if key != self.key:
+            upscaler = self.get_upscaler(upscaler_name)
+            self.upscaled = upscaler.scaler.upscale(
+                init_image, ratio, upscaler.data_path
+            )
+            self.key = key
+
         p.init_images[0] = self.upscaled
         p.extra_generation_params.update(
             {
-                "i2i Hires. fix": enable,
+                "i2i Hires. fix": True,
                 "i2i Hr. Upscaler": upscaler_name,
                 "i2i Hr. Scale": ratio,
             }
         )
-
-    def postprocess(self, p, processed, enable: bool, *args, **kwargs):
-        if enable and self.upscaled is not None:
-            processed.images.append(self.upscaled)
-            self.upscaled = None
