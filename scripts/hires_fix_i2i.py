@@ -1,15 +1,17 @@
-from modules.ui_components import InputAccordion
-from modules import scripts, shared
-from PIL import Image
+import re
+
 import gradio as gr
 import numpy as np
-import re
+from PIL import Image
+
+from modules import scripts, shared
+from modules.ui_components import InputAccordion
 
 
 class HiresI2I(scripts.Script):
 
     def __init__(self):
-        self.key: int = None
+        self.key: tuple[int, str, float] = None
         self.upscaled: Image.Image = None
 
     def title(self):
@@ -29,6 +31,7 @@ class HiresI2I(scripts.Script):
                     choices=[x.name for x in shared.sd_upscalers],
                     value=shared.sd_upscalers[0].name,
                     scale=3,
+                    elem_id="hri2i-upscaler",
                 )
                 ratio = gr.Slider(
                     minimum=1.0,
@@ -37,6 +40,7 @@ class HiresI2I(scripts.Script):
                     label="Resize by.",
                     value=2,
                     scale=1,
+                    elem_id="hri2i-ratio",
                 )
 
             def auto_scale(upscaler: str):
